@@ -1,0 +1,1001 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>イオン式ペアマッチ</title>
+    <style>
+        :root {
+            --bg-color: #fef2f2;
+            --primary-color: #ef4444;
+            --name-bg: #fee2e2; /* 物質名の背景（薄い赤） */
+            --name-border: #fca5a5;
+            --formula-bg: #ffedd5; /* 化学式の背景（薄いオレンジ） */
+            --formula-border: #fdba74;
+            --selected-border: #fbbf24;
+            --selected-bg: #fef3c7;
+        }
+
+        * {
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
+            font-family: 'Hiragino Maru Gothic ProN', 'Rounded M+ 1c', 'Meiryo', sans-serif;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: var(--bg-color);
+            color: #1f2937;
+            /* overflow: hidden; を削除し、ページ全体をスクロール可能にします */
+            touch-action: manipulation;
+        }
+
+        /* --- ホーム画面 --- */
+        #home-screen {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh; /* height から min-height に変更し、見切れを防ぎます */
+            width: 100vw;
+            background: linear-gradient(135deg, #fee2e2, #ffedd5);
+            overflow-y: auto; /* はみ出した場合にスクロール可能に */
+            padding: 40px 0; /* 上下に余白を設定 */
+        }
+
+        h1 {
+            font-size: 8vw;
+            margin-bottom: 40px;
+            color: #991b1b;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+
+        .mode-btn {
+            font-size: 3vw;
+            font-weight: bold;
+            padding: 20px 40px;
+            margin: 10px;
+            border: none;
+            border-radius: 50px;
+            background-color: var(--primary-color);
+            color: white;
+            cursor: pointer;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            transition: transform 0.1s, background-color 0.2s;
+            width: 60%;
+            max-width: 400px;
+        }
+
+        .mode-btn:active {
+            transform: translateY(2px);
+            box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+        }
+
+        .mode-btn.endless {
+            background-color: #8b5cf6;
+        }
+
+        /* --- ゲーム画面 --- */
+        #game-screen {
+            display: none;
+            flex-direction: column;
+            height: 100vh;
+            width: 100vw;
+            overflow: hidden; /* ゲーム中だけはスクロールを防止します */
+        }
+
+        /* ヘッダー */
+        #header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 20px;
+            background-color: white;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            height: 80px;
+        }
+
+        .stats {
+            display: flex;
+            gap: 20px;
+            font-size: 24px;
+            font-weight: bold;
+        }
+
+        .time-box {
+            color: #dc2626;
+            width: 120px;
+        }
+
+        .score-box {
+            color: #059669;
+        }
+
+        .home-btn-small {
+            padding: 10px 20px;
+            font-size: 16px;
+            font-weight: bold;
+            border: none;
+            border-radius: 8px;
+            background-color: #9ca3af;
+            color: white;
+            cursor: pointer;
+        }
+
+        /* --- ラウンドクリア表示 --- */
+        #round-clear-display {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) scale(0);
+            font-size: 8vw;
+            font-weight: 900;
+            color: #ef4444;
+            text-shadow: 3px 3px 0 #fff, -3px -3px 0 #fff, 3px -3px 0 #fff, -3px 3px 0 #fff, 5px 5px 15px rgba(0,0,0,0.3);
+            z-index: 150;
+            pointer-events: none;
+            opacity: 0;
+            transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.3s;
+            text-align: center;
+        }
+
+        #round-clear-display.show {
+            transform: translate(-50%, -50%) scale(1);
+            opacity: 1;
+        }
+
+        /* コンボ表示 */
+        #combo-display {
+            position: absolute;
+            top: 20%;
+            left: 50%;
+            transform: translate(-50%, -50%) scale(0);
+            font-size: 60px;
+            font-weight: 900;
+            color: #f59e0b;
+            text-shadow: 2px 2px 0 #fff, -2px -2px 0 #fff, 2px -2px 0 #fff, -2px 2px 0 #fff, 4px 4px 10px rgba(0,0,0,0.3);
+            z-index: 100;
+            pointer-events: none;
+            opacity: 0;
+            transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.2s;
+        }
+
+        #combo-display.show {
+            transform: translate(-50%, -50%) scale(1);
+            opacity: 1;
+        }
+
+        /* ボード */
+        #board {
+            flex-grow: 1;
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            grid-template-rows: repeat(3, 1fr);
+            gap: 15px;
+            padding: 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+            width: 100%;
+        }
+
+        /* スロット（カードの背景となるマス） */
+        .slot {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 12px;
+            background-color: rgba(0,0,0,0.03); /* 空のスロットのうっすら背景 */
+        }
+
+        .card {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            height: 100%;
+            font-size: clamp(18px, 3.5vh, 32px);
+            font-weight: bold;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            cursor: pointer;
+            transition: transform 0.1s, opacity 0.3s, background-color 0.2s;
+            text-align: center;
+            padding: 10px;
+            line-height: 1.2;
+        }
+
+        .card:active {
+            transform: scale(0.95);
+        }
+
+        .card.type-name {
+            background-color: var(--name-bg);
+            border: 3px solid var(--name-border);
+            color: #b91c1c;
+        }
+
+        .card.type-formula {
+            background-color: var(--formula-bg);
+            border: 3px solid var(--formula-border);
+            color: #c2410c;
+        }
+
+        .card.selected {
+            background-color: var(--selected-bg) !important;
+            border-color: var(--selected-border) !important;
+            transform: scale(1.05);
+            box-shadow: 0 0 15px rgba(251, 191, 36, 0.5);
+            color: #92400e !important;
+        }
+
+        .card.matched {
+            opacity: 0;
+            pointer-events: none;
+            transform: scale(1.2);
+        }
+
+        /* エラー時の揺れアニメーション */
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-10px); }
+            50% { transform: translateX(10px); }
+            75% { transform: translateX(-10px); }
+        }
+        .shake {
+            animation: shake 0.4s;
+            background-color: #fecaca !important;
+            border-color: #ef4444 !important;
+        }
+
+        /* --- カウントダウン表示 --- */
+        #countdown-overlay {
+            display: none;
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background-color: rgba(0, 0, 0, 0.5);
+            z-index: 300;
+            justify-content: center;
+            align-items: center;
+        }
+
+        #countdown-text {
+            font-size: 25vw;
+            font-weight: 900;
+            color: white;
+            text-shadow: 4px 4px 15px rgba(0,0,0,0.5);
+            opacity: 0; /* アニメーション前は非表示 */
+        }
+
+        @keyframes popIn {
+            0% { transform: scale(0.3); opacity: 0; }
+            40% { transform: scale(1.1); opacity: 1; }
+            60% { transform: scale(1); opacity: 1; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        .pop {
+            animation: popIn 1s ease-out;
+        }
+
+        /* --- 結果画面（iPadを掲げる用） --- */
+        #result-screen {
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            width: 100vw;
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 200;
+        }
+
+        #result-stamp {
+            font-size: 8vw;
+            font-weight: 900;
+            color: white;
+            text-shadow: 4px 4px 0 rgba(0,0,0,0.3);
+            margin-bottom: 20px;
+            transform: rotate(-10deg);
+        }
+
+        #result-score {
+            font-size: 25vw; /* 超巨大 */
+            font-weight: 900;
+            color: white;
+            line-height: 1;
+            text-shadow: 8px 8px 0 rgba(0,0,0,0.3);
+        }
+
+        .score-unit {
+            font-size: 8vw;
+        }
+
+        #result-time {
+            font-size: 8vw;
+            font-weight: bold;
+            color: white;
+            margin-top: 20px;
+            text-shadow: 3px 3px 0 rgba(0,0,0,0.3);
+            display: none; /* デフォルト非表示、パーフェクト時のみ表示 */
+        }
+
+        #result-home-btn {
+            position: absolute;
+            bottom: 30px;
+            padding: 15px 40px;
+            font-size: 3vw;
+            font-weight: bold;
+            border: none;
+            border-radius: 50px;
+            background-color: rgba(255, 255, 255, 0.9);
+            color: #333;
+            cursor: pointer;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+        }
+
+        sup, sub {
+            font-size: 0.75em;
+            line-height: 1;
+            position: relative;
+            vertical-align: baseline;
+        }
+
+        sup {
+            top: -0.5em;
+            margin-left: 1px;
+        }
+
+        sub {
+            bottom: -0.25em;
+            margin-right: 1px;
+        }
+
+        /* --- 学習画面 --- */
+        #study-screen {
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh; /* height から min-height に変更 */
+            width: 100vw;
+            background-color: var(--bg-color);
+            padding: 20px;
+            overflow-y: auto; /* 一覧が長い場合はスクロール可能に */
+        }
+
+        #study-screen h2 {
+            font-size: 5vw;
+            color: #991b1b;
+            margin-bottom: 20px;
+            margin-top: 20px;
+            text-align: center;
+        }
+
+        .study-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 15px;
+            width: 100%;
+            max-width: 1000px;
+            margin-bottom: 40px;
+        }
+
+        .study-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: white;
+            padding: 15px 25px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+            font-size: 26px;
+            font-weight: bold;
+        }
+
+        .study-name {
+            color: #b91c1c;
+            background-color: var(--name-bg);
+            padding: 8px 15px;
+            border-radius: 8px;
+            border: 2px solid var(--name-border);
+        }
+
+        .study-formula {
+            color: #c2410c;
+            background-color: var(--formula-bg);
+            padding: 8px 15px;
+            border-radius: 8px;
+            border: 2px solid var(--formula-border);
+        }
+
+        .study-home-btn {
+            padding: 15px 40px;
+            font-size: 3vw;
+            font-weight: bold;
+            border: none;
+            border-radius: 50px;
+            background-color: #9ca3af;
+            color: white;
+            cursor: pointer;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            margin-bottom: 40px;
+            width: 60%;
+            max-width: 400px;
+            flex-shrink: 0;
+        }
+
+        /* --- スマホ向けレイアウト自動調整（レスポンシブ） --- */
+        @media (max-width: 768px) {
+            #board {
+                grid-template-columns: repeat(3, 1fr); /* スマホ画面では横3列に */
+                grid-template-rows: repeat(4, 1fr); /* 縦4段に変更 */
+                gap: 10px;
+                padding: 10px;
+            }
+            .card {
+                font-size: clamp(16px, 2.8vh, 24px); 
+            }
+            h1 {
+                font-size: 10vw;
+            }
+            .mode-btn {
+                font-size: 5vw;
+                padding: 15px 30px;
+                width: 80%;
+            }
+            .study-home-btn {
+                font-size: 5vw;
+                width: 80%;
+            }
+            #header {
+                height: auto;
+                flex-direction: column;
+                gap: 10px;
+                padding: 15px;
+            }
+            .stats {
+                font-size: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- ホーム画面 -->
+    <div id="home-screen">
+        <h1>イオン式ペアマッチ</h1>
+        <button class="mode-btn" onclick="startGame('1min')">1分モード</button>
+        <button class="mode-btn" onclick="startGame('3min')">3分モード</button>
+        <button class="mode-btn endless" onclick="startGame('endless')">時間制限なしモード</button>
+        <button class="mode-btn" style="background-color: #f59e0b; margin-top: 40px;" onclick="openStudyScreen()">📖 学習する（一覧表）</button>
+    </div>
+
+    <!-- 学習画面 -->
+    <div id="study-screen">
+        <h2>イオン式 一覧表</h2>
+        <div class="study-list" id="study-list">
+            <!-- JSで動的に生成されます -->
+        </div>
+        <button class="study-home-btn" onclick="closeStudyScreen()">ホームに戻る</button>
+    </div>
+
+    <!-- ゲーム画面 -->
+    <div id="game-screen">
+        <div id="header">
+            <div class="stats">
+                <div class="time-box">残り: <span id="time-display">0:00</span></div>
+                <div class="score-box">記録: <span id="score-display">0</span>組</div>
+            </div>
+            <button class="home-btn-small" onclick="goHome()">ホームに戻る</button>
+        </div>
+        
+        <div id="combo-display">2 COMBO!</div>
+        <div id="round-clear-display">1周目クリア！</div>
+
+        <div id="board">
+            <!-- スロット12個を固定配置 -->
+            <div class="slot" id="slot-0"></div>
+            <div class="slot" id="slot-1"></div>
+            <div class="slot" id="slot-2"></div>
+            <div class="slot" id="slot-3"></div>
+            <div class="slot" id="slot-4"></div>
+            <div class="slot" id="slot-5"></div>
+            <div class="slot" id="slot-6"></div>
+            <div class="slot" id="slot-7"></div>
+            <div class="slot" id="slot-8"></div>
+            <div class="slot" id="slot-9"></div>
+            <div class="slot" id="slot-10"></div>
+            <div class="slot" id="slot-11"></div>
+        </div>
+    </div>
+
+    <!-- 結果画面（iPad掲示用） -->
+    <div id="result-screen">
+        <div id="result-stamp">GREAT!</div>
+        <div id="result-score">19<span class="score-unit">組</span></div>
+        <div id="result-time">タイム: 1分23秒</div>
+        <button id="result-home-btn" onclick="goHome()">ホーム画面に戻る</button>
+    </div>
+
+    <!-- カウントダウン画面 -->
+    <div id="countdown-overlay">
+        <div id="countdown-text">3</div>
+    </div>
+
+<script>
+    // 物質データ（全17種）画像に基づく
+    const masterSubstances = [
+        { name: "水素<br>イオン", formula: "H<sup>+</sup>" },
+        { name: "リチウム<br>イオン", formula: "Li<sup>+</sup>" },
+        { name: "ナトリウム<br>イオン", formula: "Na<sup>+</sup>" },
+        { name: "カリウム<br>イオン", formula: "K<sup>+</sup>" },
+        { name: "銀<br>イオン", formula: "Ag<sup>+</sup>" },
+        { name: "アンモニウム<br>イオン", formula: "NH<sub>4</sub><sup>+</sup>" },
+        { name: "マグネシウム<br>イオン", formula: "Mg<sup>2+</sup>" },
+        { name: "カルシウム<br>イオン", formula: "Ca<sup>2+</sup>" },
+        { name: "銅<br>イオン", formula: "Cu<sup>2+</sup>" },
+        { name: "亜鉛<br>イオン", formula: "Zn<sup>2+</sup>" },
+        { name: "バリウム<br>イオン", formula: "Ba<sup>2+</sup>" },
+        { name: "塩化物<br>イオン", formula: "Cl<sup>-</sup>" },
+        { name: "水酸化物<br>イオン", formula: "OH<sup>-</sup>" },
+        { name: "酸化物<br>イオン", formula: "O<sup>2-</sup>" },
+        { name: "硫化物<br>イオン", formula: "S<sup>2-</sup>" },
+        { name: "炭酸<br>イオン", formula: "CO<sub>3</sub><sup>2-</sup>" },
+        { name: "硫酸<br>イオン", formula: "SO<sub>4</sub><sup>2-</sup>" }
+    ];
+
+    let currentMode = '';
+    let timerInterval = null;
+    let countdownTimeout = null; // カウントダウン用タイマー
+    let timeRemaining = 0; // 制限時間モード用
+    let timeElapsed = 0;   // エンドレス・クリアタイム計測用
+    
+    let score = 0;
+    let combo = 0;
+    let clearedPairsSinceLastRefill = 0; // 補充後に消したペアの数（3になったら補充）
+    let roundCount = 1; // 現在の周回数
+    
+    let remainingPairs = []; // まだ場に出ていないペアのリスト
+    let boardSlots = new Array(12).fill(null); // 盤面12マスの状態 (カードオブジェクトが入る。空はnull)
+    
+    let firstSelectedCard = null;
+    let isProcessing = false; // アニメーション中のタップ防止
+
+    // DOM要素
+    const homeScreen = document.getElementById('home-screen');
+    const gameScreen = document.getElementById('game-screen');
+    const resultScreen = document.getElementById('result-screen');
+    const timeDisplay = document.getElementById('time-display');
+    const scoreDisplay = document.getElementById('score-display');
+    const comboDisplay = document.getElementById('combo-display');
+    const roundClearDisplay = document.getElementById('round-clear-display');
+    
+    const resultStamp = document.getElementById('result-stamp');
+    const resultScore = document.getElementById('result-score');
+    const resultTime = document.getElementById('result-time');
+
+    // 配列のシャッフル関数
+    function shuffleArray(array) {
+        const arr = [...array];
+        for (let i = arr.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [arr[i], arr[j]] = [arr[j], arr[i]];
+        }
+        return arr;
+    }
+
+    // ゲーム開始
+    function startGame(mode) {
+        currentMode = mode;
+        score = 0;
+        combo = 0;
+        timeElapsed = 0;
+        clearedPairsSinceLastRefill = 0;
+        roundCount = 1;
+        firstSelectedCard = null;
+        isProcessing = true; // カウントダウン中はタップ不可
+        
+        scoreDisplay.innerText = score;
+        comboDisplay.classList.remove('show');
+        roundClearDisplay.classList.remove('show');
+        
+        // モード別の時間設定
+        if (mode === '1min') {
+            timeRemaining = 60;
+            document.querySelector('.time-box').innerHTML = '残り: <span id="time-display">1:00</span>';
+        } else if (mode === '3min') {
+            timeRemaining = 180;
+            document.querySelector('.time-box').innerHTML = '残り: <span id="time-display">3:00</span>';
+        } else {
+            timeRemaining = 0; // エンドレス
+            document.querySelector('.time-box').innerHTML = '経過: <span id="time-display">0:00</span>';
+        }
+
+        initRound();
+
+        // 画面切り替え
+        homeScreen.style.display = 'none';
+        resultScreen.style.display = 'none';
+        gameScreen.style.display = 'flex';
+
+        // カウントダウン開始
+        startCountdown();
+    }
+
+    function startCountdown() {
+        const overlay = document.getElementById('countdown-overlay');
+        const textEl = document.getElementById('countdown-text');
+        overlay.style.display = 'flex';
+        
+        let count = 3;
+        
+        function tick() {
+            if (count > 0) {
+                textEl.innerText = count;
+                // アニメーションを再トリガーするためのリセット
+                textEl.classList.remove('pop');
+                void textEl.offsetWidth; // リフロー強制
+                textEl.classList.add('pop');
+                
+                countdownTimeout = setTimeout(() => {
+                    count--;
+                    tick();
+                }, 1000);
+            } else if (count === 0) {
+                textEl.innerText = 'START!';
+                textEl.style.color = '#fbbf24'; // スタート時は黄色っぽく目立たせる
+                textEl.classList.remove('pop');
+                void textEl.offsetWidth;
+                textEl.classList.add('pop');
+                
+                countdownTimeout = setTimeout(() => {
+                    overlay.style.display = 'none';
+                    isProcessing = false; // タップ解禁
+                    textEl.style.color = 'white'; // 色を戻しておく
+                    
+                    // タイマースタート
+                    clearInterval(timerInterval);
+                    timerInterval = setInterval(updateTimer, 1000);
+                }, 1000);
+            }
+        }
+        
+        tick();
+    }
+
+    function initRound() {
+        // データの準備（19ペアをシャッフル）
+        remainingPairs = shuffleArray(masterSubstances);
+        boardSlots = new Array(12).fill(null);
+        
+        // スロットのDOMをクリア
+        for(let i=0; i<12; i++){
+            document.getElementById(`slot-${i}`).innerHTML = '';
+        }
+
+        // 初期盤面の作成（6ペア=12枚）
+        let initialCards = [];
+        for(let i=0; i<6; i++) {
+            const pair = remainingPairs.pop();
+            initialCards.push({ id: i, text: pair.name, type: 'name', pairId: pair.name });
+            initialCards.push({ id: i+6, text: pair.formula, type: 'formula', pairId: pair.name });
+        }
+        initialCards = shuffleArray(initialCards);
+
+        // 盤面に配置
+        for(let i=0; i<12; i++) {
+            boardSlots[i] = initialCards[i];
+            createCardElement(initialCards[i], i);
+        }
+    }
+
+    // カード要素の作成と配置
+    function createCardElement(cardData, slotIndex) {
+        const cardEl = document.createElement('div');
+        cardEl.className = `card type-${cardData.type}`;
+        cardEl.innerHTML = cardData.text;
+        cardEl.dataset.slot = slotIndex;
+        cardEl.dataset.pairId = cardData.pairId;
+        cardEl.dataset.type = cardData.type;
+        
+        cardEl.addEventListener('click', () => handleCardClick(cardEl));
+        
+        const slotEl = document.getElementById(`slot-${slotIndex}`);
+        slotEl.innerHTML = ''; // 既存のものを消す
+        slotEl.appendChild(cardEl);
+        
+        // 補充時のフワッと現れるアニメーション
+        cardEl.style.opacity = '0';
+        setTimeout(() => cardEl.style.opacity = '1', 50);
+    }
+
+    // カードクリック時の処理
+    function handleCardClick(cardEl) {
+        if (isProcessing || cardEl.classList.contains('matched')) return;
+        
+        // 同じカードを再度タップした場合はキャンセル
+        if (firstSelectedCard === cardEl) {
+            cardEl.classList.remove('selected');
+            firstSelectedCard = null;
+            return;
+        }
+
+        // 1枚目の選択
+        if (!firstSelectedCard) {
+            cardEl.classList.add('selected');
+            firstSelectedCard = cardEl;
+            return;
+        }
+
+        // 2枚目の選択
+        isProcessing = true;
+        const secondSelectedCard = cardEl;
+        secondSelectedCard.classList.add('selected');
+
+        // 判定
+        if (firstSelectedCard.dataset.pairId === secondSelectedCard.dataset.pairId 
+            && firstSelectedCard.dataset.type !== secondSelectedCard.dataset.type) {
+            // 正解
+            handleMatch(firstSelectedCard, secondSelectedCard);
+        } else {
+            // 不正解
+            handleMismatch(firstSelectedCard, secondSelectedCard);
+        }
+    }
+
+    // 正解時の処理
+    function handleMatch(card1, card2) {
+        score++;
+        combo++;
+        clearedPairsSinceLastRefill++;
+        scoreDisplay.innerText = score;
+        
+        // コンボ表示
+        if (combo >= 2) {
+            comboDisplay.innerText = `${combo} COMBO!`;
+            comboDisplay.classList.remove('show');
+            // リフローを強制してアニメーションを再トリガー
+            void comboDisplay.offsetWidth; 
+            comboDisplay.classList.add('show');
+            setTimeout(() => comboDisplay.classList.remove('show'), 1500);
+        }
+
+        // 消えるアニメーション
+        card1.classList.add('matched');
+        card2.classList.add('matched');
+        card1.classList.remove('selected');
+        card2.classList.remove('selected');
+
+        const slot1 = parseInt(card1.dataset.slot);
+        const slot2 = parseInt(card2.dataset.slot);
+
+        // スロットを空にする
+        boardSlots[slot1] = null;
+        boardSlots[slot2] = null;
+
+        setTimeout(() => {
+            // DOMからも削除（スロットの背景色だけ残る）
+            if (card1.parentNode) card1.parentNode.innerHTML = '';
+            if (card2.parentNode) card2.parentNode.innerHTML = '';
+
+            // 全ペア完了（1周クリア）判定
+            // scoreは累積なので、総ペア数の倍数になった時に周回クリアとみなす
+            const totalPairs = masterSubstances.length;
+            if (score > 0 && score % totalPairs === 0) {
+                isProcessing = true; // 演出中のタップ防止
+                
+                // 「○周目クリア！」の表示
+                roundClearDisplay.innerText = `${roundCount}周目クリア！`;
+                roundClearDisplay.classList.remove('show');
+                void roundClearDisplay.offsetWidth; // リフロー強制
+                roundClearDisplay.classList.add('show');
+                
+                setTimeout(() => {
+                    roundClearDisplay.classList.remove('show');
+                    roundCount++;
+                    clearedPairsSinceLastRefill = 0;
+                    initRound(); // 盤面を次の周用にリセット
+                    firstSelectedCard = null;
+                    isProcessing = false;
+                }, 1500); // メッセージを1.5秒表示してから次へ
+                return; // ここで一旦終了（通常の補充処理は行わない）
+            }
+
+            // ★【まとめ補充システム】3ペア（6枚）消えたら、まとめて補充する
+            if (clearedPairsSinceLastRefill >= 3 && remainingPairs.length > 0) {
+                // 何ペア補充できるか確認（基本は3ペア、残り少なければあるだけ）
+                const pairsToRefill = Math.min(3, remainingPairs.length);
+                let newCards = [];
+                
+                for(let i=0; i<pairsToRefill; i++) {
+                    const nextPair = remainingPairs.pop();
+                    newCards.push({ text: nextPair.name, type: 'name', pairId: nextPair.name });
+                    newCards.push({ text: nextPair.formula, type: 'formula', pairId: nextPair.name });
+                }
+                
+                // 補充するカードをシャッフル
+                newCards = shuffleArray(newCards);
+                
+                // 空いているスロットを探す
+                let emptySlotIndices = [];
+                for(let i=0; i<12; i++) {
+                    if(boardSlots[i] === null) {
+                        emptySlotIndices.push(i);
+                    }
+                }
+                
+                // 空きスロットに順番に配置（カード自体はシャッフル済み）
+                for(let i=0; i<newCards.length; i++) {
+                    const targetSlot = emptySlotIndices[i];
+                    boardSlots[targetSlot] = newCards[i];
+                    createCardElement(newCards[i], targetSlot);
+                }
+                
+                // 補充カウントをリセット
+                clearedPairsSinceLastRefill = 0;
+            }
+            
+            firstSelectedCard = null;
+            isProcessing = false;
+        }, 300); // 消えるアニメーションの完了を待つ
+    }
+
+    // 不正解時の処理
+    function handleMismatch(card1, card2) {
+        combo = 0; // コンボリセット（ペナルティ）
+        
+        card1.classList.add('shake');
+        card2.classList.add('shake');
+
+        setTimeout(() => {
+            card1.classList.remove('shake', 'selected');
+            card2.classList.remove('shake', 'selected');
+            firstSelectedCard = null;
+            isProcessing = false;
+        }, 400); // 揺れるアニメーションの完了を待つ
+    }
+
+    // タイマー更新
+    function updateTimer() {
+        timeElapsed++;
+        
+        let displaySec = 0;
+        let displayMin = 0;
+
+        if (currentMode === '1min' || currentMode === '3min') {
+            timeRemaining--;
+            displayMin = Math.floor(timeRemaining / 60);
+            displaySec = timeRemaining % 60;
+            
+            if (timeRemaining <= 0) {
+                endGame(false);
+            }
+        } else {
+            // エンドレスモード
+            displayMin = Math.floor(timeElapsed / 60);
+            displaySec = timeElapsed % 60;
+        }
+        
+        const timeDisplayEl = document.getElementById('time-display');
+        if (timeDisplayEl) {
+            timeDisplayEl.innerText = `${displayMin}:${displaySec.toString().padStart(2, '0')}`;
+        }
+    }
+
+    // ゲーム終了・結果表示
+    function endGame(isPerfect) {
+        // ※この引数 isPerfect は今回は使用しません（周回制のため）
+        clearInterval(timerInterval);
+        gameScreen.style.display = 'none';
+        resultScreen.style.display = 'flex';
+
+        // 記録の表示
+        resultScore.innerHTML = `${score}<span class="score-unit">組</span>`;
+
+        // タイム表示のフォーマット
+        const min = Math.floor(timeElapsed / 60);
+        const sec = timeElapsed % 60;
+        const timeString = min > 0 ? `${min}分${sec}秒` : `${sec}秒`;
+
+        // 背景色とスタンプの演出（トータル獲得数で判定）
+        if (score >= 140) { // 究極レベル
+            resultScreen.style.background = 'linear-gradient(135deg, #020617, #312e81, #9d174d)'; // 宇宙のようなギャラクシーカラー
+            resultStamp.innerText = 'ULTIMATE!!';
+            resultTime.style.display = 'block';
+            resultTime.innerText = `タイム: ${timeString}`;
+        } else if (score >= 120) { // 異次元レベル
+            resultScreen.style.background = 'linear-gradient(135deg, #111827, #f59e0b, #111827)'; // 黒と金の王者の色
+            resultStamp.innerText = 'LEGEND!!';
+            resultTime.style.display = 'block';
+            resultTime.innerText = `タイム: ${timeString}`;
+        } else if (score >= 100) { // 超一流レベル
+            resultScreen.style.background = 'linear-gradient(135deg, #7e22ce, #db2777)'; // 紫とピンクのサイバー系
+            resultStamp.innerText = 'GENIUS!!';
+            resultTime.style.display = 'block';
+            resultTime.innerText = `タイム: ${timeString}`;
+        } else if (score >= 80) { // 凄腕レベル
+            resultScreen.style.background = 'linear-gradient(135deg, #4338ca, #06b6d4)'; // インディゴとシアンのクール系
+            resultStamp.innerText = 'FANTASTIC!!';
+            resultTime.style.display = 'block';
+            resultTime.innerText = `タイム: ${timeString}`;
+        } else if (score >= 60) { // 達人レベル
+            resultScreen.style.background = 'linear-gradient(135deg, #be123c, #fbbf24)'; // 深紅と黄色
+            resultStamp.innerText = 'UNBELIEVABLE!';
+            resultTime.style.display = 'block';
+            resultTime.innerText = `タイム: ${timeString}`;
+        } else if (score >= 38) { // 2周以上
+             resultScreen.style.background = 'linear-gradient(135deg, #ef4444, #f97316)'; // 赤・濃いオレンジ
+             resultStamp.innerText = 'GOD!!';
+             resultTime.style.display = 'block';
+             resultTime.innerText = `タイム: ${timeString}`;
+        } else if (score >= 19) { // 1周以上
+            // パーフェクト
+            resultScreen.style.background = 'linear-gradient(135deg, #f43f5e, #fb923c)'; // ローズ・オレンジ
+            resultStamp.innerText = 'PERFECT!!';
+            resultTime.style.display = 'block';
+            resultTime.innerText = `タイム: ${timeString}`;
+        } else if (score >= 15) {
+            // 優秀（黄色/オレンジベース）
+            resultScreen.style.background = 'linear-gradient(135deg, #f59e0b, #fbbf24)';
+            resultStamp.innerText = 'EXCELLENT!';
+            resultTime.style.display = 'none';
+        } else if (score >= 10) {
+            // 良好（緑色ベース）
+            resultScreen.style.background = 'linear-gradient(135deg, #10b981, #34d399)';
+            resultStamp.innerText = 'GREAT!';
+            resultTime.style.display = 'none';
+        } else {
+            // がんばろう（青色ベース）
+            resultScreen.style.background = 'linear-gradient(135deg, #3b82f6, #60a5fa)';
+            resultStamp.innerText = 'GOOD!';
+            resultTime.style.display = 'none';
+        }
+    }
+
+    // ホームに戻る
+    function goHome() {
+        clearInterval(timerInterval);
+        clearTimeout(countdownTimeout);
+        document.getElementById('countdown-overlay').style.display = 'none';
+        resultScreen.style.display = 'none';
+        gameScreen.style.display = 'none';
+        homeScreen.style.display = 'flex';
+    }
+
+    // 学習画面を開く
+    function openStudyScreen() {
+        homeScreen.style.display = 'none';
+        document.getElementById('study-screen').style.display = 'flex';
+        
+        // 一覧表がまだ生成されていなければ生成する
+        const studyList = document.getElementById('study-list');
+        if (studyList.children.length === 0) {
+            masterSubstances.forEach(sub => {
+                const item = document.createElement('div');
+                item.className = 'study-item';
+                // 一覧表では改行を消して1行で表示
+                const displayName = sub.name.replace(/<br>/g, '');
+                item.innerHTML = `
+                    <div class="study-name">${displayName}</div>
+                    <div class="study-formula">${sub.formula}</div>
+                `;
+                studyList.appendChild(item);
+            });
+        }
+    }
+
+    // 学習画面からホームに戻る
+    function closeStudyScreen() {
+        document.getElementById('study-screen').style.display = 'none';
+        homeScreen.style.display = 'flex';
+    }
+</script>
+</body>
+</html>
